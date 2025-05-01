@@ -1,240 +1,183 @@
-# 🦠 Documentación Técnica - Sistema de Seguimiento COVID-19
-**Versión 1.0**
+# Proyecto: Control y Reportes de Casos por Provincia
 
-
-## 📌 1. Introducción
-Sistema Java para consultar y almacenar datos epidemiológicos de COVID-19 mediante una API externa, con persistencia en base de datos relacional.
-
-
-
-## 🖼️ 13. Capturas de Pantalla
-
-### 🗂️ Pantalla 1: Listado de Regiones  
-Muestra todas las regiones obtenidas desde el servicio web, implementando paginación.  
-El usuario puede navegar entre páginas (siguiente o anterior).  
-Para consultar las provincias de una región, se debe seleccionar la opción `1` y luego ingresar el número correspondiente a la región deseada.
-
-![Captura 1](https://github.com/gjagomez/covid19/blob/main/capturas/1.png)  
-![Captura 2](https://github.com/gjagomez/covid19/raw/main/capturas/2.png)  
-![Captura 3](https://github.com/gjagomez/covid19/raw/main/capturas/3.png)
+Este proyecto implementa la generación de reportes para una fecha y país específicos, asegurando que no se dupliquen los datos y que los resultados estén ordenados.
 
 ---
 
-### 🏙️ Pantalla 2: Listado de Provincias  
-Muestra las provincias asociadas a la región seleccionada por el usuario.
+## Requerimiento 1: Controlar ejecución del thread para un país y una fecha
 
-![Captura 4](https://github.com/gjagomez/covid19/raw/main/capturas/4.png)
+**Objetivo:** Evitar que el proceso de generación de reportes se ejecute dos veces para el mismo país en la misma fecha.
 
----
+### 1.1 Validar si ya se ejecutó
 
-### 📊 Pantalla 3: Reportes Epidemiológicos  
-Visualiza los reportes detallados de la provincia seleccionada:  
-casos confirmados, fallecidos y recuperados.
-
-![Captura 5](https://github.com/gjagomez/covid19/raw/main/capturas/5.png)
-
-
-## 🖼️ 13. DOCUMENTACION Y REQUISITOS
-
-## ⚙️ 3. Requisitos Técnicos
-
-| 🧱 Componente      | 📦 Versión                      |
-|-------------------|-------------------------------|
-| ☕ Java            | 8+                            |
-| 🧪 Maven           | 3.6+                          |
-| 🛢️ Base de Datos   | MySQL 5.7+                    |
-| 📚 Dependencias    | Apache HttpClient, Jackson JSON |
-
----
-
-## ⚙️ 4. Configuración Inicial
-
-### 🗂️ 4.1 Archivo `application.properties`
-
-```properties
-# Configuración Base de Datos
-spring.datasource.url=jdbc:mysql://localhost:3306/covid_db
-spring.datasource.username=usuario
-spring.datasource.password=contraseña
-
-# Configuración API
-rapidapi.key=tu-api-key
-rapidapi.host=api.covid19data.com
-```
-
----
-
-## 🗃️ 5. Estructura del Proyecto
-
-```
-src/
-├── main/
-│   ├── java/
-│   │   └── com/umg/covid19/
-│   │       ├── controller/
-│   │       ├── dto/              # Objetos de Transferencia de Datos
-│   │       ├── model/            # Entidades de persistencia
-│   │       ├── repository/       # Acceso a datos
-│   │       ├── service/          # Lógica de negocio
-│   │       ├── util/             # Utilidades comunes
-│   │       └── Main.java         # Punto de entrada
-│   └── resources/
-│       ├── application.properties
-│       └── log4j2.xml
-```
-
----
-
-## 🧠 6. Componentes Principales
-
-### 🚀 6.1 Clase Main
+**Fragmento de código:**
 
 ```java
-public class Main {
-    // Flujo principal:
-    // 1. Carga regiones con paginación
-    // 2. Guarda regiones en DB
-    // 3. Carga provincias de región seleccionada
-    // 4. Muestra reportes actuales
+boolean alreadyExecuted = executionRegistry.isExecuted("2022-04-16", "ARG");
+
+if (alreadyExecuted) {
+    System.out.println("Ya se ejecutó para esta fecha y país.");
+    return;
 }
 ```
 
-### 📡 6.2 CovidDataService
+**¿Qué hace este fragmento?**
+
+- Verifica si ya existe un registro para esa combinación de fecha y país.
+- Si ya se ejecutó, imprime un mensaje y detiene el proceso.
+
+### 1.2 Registrar nueva ejecución
+
+**Fragmento de código:**
 
 ```java
-public class CovidDataService {
-    // Métodos principales:
-    // - fetchRegions(): List<RegionDTO>
-    // - fetchProvinces(String iso): List<ProvinceDTO>
-    // - fetchReports(String code, String date): List<ReportDTO>
+executionRegistry.registerExecution("2022-04-16", "ARG");
+```
+
+**¿Qué hace este fragmento?**
+
+- Guarda la ejecución actual en el registro para futuras validaciones.
+
+---
+
+## Requerimiento 2: Mostrar los reportes
+
+**Objetivo:** Imprimir la lista de provincias de manera ordenada alfabéticamente y mostrar la cantidad de casos.
+
+### 2.1 Obtener los reportes
+
+**Fragmento de código:**
+
+```java
+List<Report> reports = reportService.getReportsByDateAndCountry("2022-04-16", "ARG");
+```
+
+**¿Qué hace este fragmento?**
+
+- Obtiene los reportes de casos para una fecha y país especificados.
+
+### 2.2 Ordenar y eliminar duplicados
+
+**Fragmento de código:**
+
+```java
+Map<String, Integer> provinceCases = new TreeMap<>();
+
+for (Report report : reports) {
+    provinceCases.put(report.getProvinceName(), report.getCases());
 }
 ```
 
-### 🌐 6.3 ApiClient
+**¿Qué hace este fragmento?**
+
+- Usa un `TreeMap` para:
+  - Eliminar duplicados: si una provincia aparece varias veces, solo queda una.
+  - Ordenar automáticamente los nombres de provincias de forma alfabética.
+
+### 2.3 Mostrar los reportes
+
+**Fragmento de código:**
 
 ```java
-public class ApiClient {
-    // Configura headers para RapidAPI
-    // Maneja serialización JSON a DTOs
-    // Métodos principales:
-    // - executeGetRequest(): List<T>
+for (Map.Entry<String, Integer> entry : provinceCases.entrySet()) {
+    System.out.println(entry.getKey() + " -> " + entry.getValue());
 }
 ```
 
-### 💾 6.4 DatabaseHelper
+**¿Qué hace este fragmento?**
 
-```java
-public class DatabaseHelper {
-    // Operaciones CRUD básicas:
-    // - saveRegion(): Upsert regions
-    // - saveProvince(): Upsert provinces
-    // - executeUpdate(): Método genérico para queries
-}
-```
+- Recorre el `TreeMap` y muestra el nombre de cada provincia seguido de la cantidad de casos.
 
----
-
-## 🔁 7. Flujo de Datos
-
-1. 🔄 Consulta API  
-   `Main -> CovidDataService -> ApiClient -> API Externa`
-2. 💽 Persistencia  
-   `ApiClient -> DatabaseHelper -> MySQL`
-3. 🖥️ Interfaz de Usuario  
-   `Consola -> Paginación -> Selección -> Visualización`
-
----
-
-
-
-## 🧾 9. Especificación de DTOs
-
-### 🌍 RegionDTO
-
-| Campo | Tipo   | Descripción       |
-|-------|--------|-------------------|
-| iso   | String | Código ISO región |
-| name  | String | Nombre región     |
-
-### 🏙️ ProvinceDTO
-
-| Campo    | Tipo   | Descripción             |
-|----------|--------|-------------------------|
-| iso      | String | Código ISO región padre |
-| code     | String | Código único provincia  |
-| province | String | Nombre provincia        |
-
-### 📊 ReportDTO
-
-| Campo     | Tipo      | Descripción         |
-|-----------|-----------|---------------------|
-| date      | LocalDate | Fecha reporte       |
-| confirmed | int       | Casos confirmados   |
-| deaths    | int       | Muertes registradas |
-| recovered | int       | Casos recuperados   |
-
----
-
-## 🧯 10. Manejo de Errores
-
-| Escenario         | Manejo                                |
-|-------------------|----------------------------------------|
-| 🚫 API no disponible | Log en consola + mensaje usuario       |
-| 🔌 DB desconectada   | Fallo silencioso (solo log)            |
-| 📝 Entrada inválida  | Reintento interactivo                  |
-
----
-
-## ▶️ 11. Ejecución del Sistema
+**Salida esperada:**
 
 ```bash
-mvn clean package
-java -jar target/covid19-data-consultation.jar
-```
-
-### 📈 Flujo de Consola
-
-1. Seleccionar región con paginación  
-2. Elegir provincia  
-3. Visualizar reportes del día
-
-
-
-
-
-
-
-
-## 📌 Anexo Técnico - Códigos de Ejemplo
-
-### 🧾 Método de Paginación
-
-```java
-private static <T> T displayItemsWithPagination(List<T> items, String itemType, int pageSize, Scanner scanner) {
-    // Lógica de paginación con:
-    // - Cálculo de páginas
-    // - Navegación interactiva
-    // - Validación de entradas
-}
-```
-
-### 🌐 Consulta API
-
-```java
-public List<ReportDTO> fetchReports(String provinceCode, String date) throws Exception {
-    String url = "https://" + RAPID_API_HOST + "/reports?iso=" + provinceCode + "&date=2020-04-16";
-    return executeGetRequest(url, ReportDTO.class);
-}
+Buenos Aires -> 1500
+Cordoba -> 700
+Santa Fe -> 600
 ```
 
 ---
 
-**🧑 Elaborado por:** Grupo 5
-**🗓️ Fecha:** 25/04/2025 
-**Integrantes:
-| 🧑‍💼 Nombre           | 🆔 Carnet        |
-|----------------------|------------------|
-| Javier Gomez Riz     | 1990-07-12940    |
-| Oscar Monroy         | 5190-17-10362    |
-| Brandon Nij          | 6590-23-19976    |
-**📌 Revisión:** 1.0
+## Clase adicional: SerieI - Encontrar Caminos en un Árbol Binario
+
+Esta clase busca todos los caminos en un árbol binario donde la suma de los nodos sea igual a un valor objetivo.
+
+### Fragmento principal:
+
+```java
+public List<List<Integer>> pathSum(TreeNode root, int targetSum) {
+    List<List<Integer>> result = new ArrayList<>();
+    List<Integer> currentPath = new ArrayList<>();
+    findPaths(root, targetSum, currentPath, result);
+    return result;
+}
+```
+
+**¿Qué hace este fragmento?**
+
+- Inicializa listas para almacenar los caminos encontrados.
+- Llama al método auxiliar `findPaths` para buscar todos los caminos válidos.
+
+### Lógica de búsqueda:
+
+```java
+private void findPaths(TreeNode node, int targetSum, List<Integer> currentPath, List<List<Integer>> result) {
+    if (node == null) return;
+
+    currentPath.add(node.val);
+
+    if (node.left == null && node.right == null && targetSum == node.val) {
+        result.add(new ArrayList<>(currentPath));
+    } else {
+        findPaths(node.left, targetSum - node.val, currentPath, result);
+        findPaths(node.right, targetSum - node.val, currentPath, result);
+    }
+
+    currentPath.remove(currentPath.size() - 1);
+}
+```
+
+**¿Qué hace este fragmento?**
+
+- Si el nodo actual es nulo, termina.
+- Agrega el valor del nodo actual al camino en curso.
+- Si es una hoja y el valor coincide con `targetSum`, guarda el camino.
+- Si no, sigue buscando por la izquierda y derecha.
+- Al regresar, elimina el nodo actual del camino para explorar nuevas rutas.
+
+### Árbol de prueba:
+
+```java
+TreeNode root = buildSampleTree();
+int targetSum = 22;
+
+List<List<Integer>> paths = finder.pathSum(root, targetSum);
+System.out.println(paths);
+```
+
+**Ejemplo de salida:**
+
+```bash
+[[5, 4, 11, 2], [5, 8, 4, 5]]
+```
+
+---
+
+## Clases utilizadas:
+
+- `ExecutionRegistry`: Maneja el registro de ejecuciones.
+- `ReportService`: Proporciona los reportes de casos.
+- `Report`: Representa el reporte de casos para una provincia.
+- `SerieI`: Encuentra caminos en un árbol binario cuya suma coincida con un valor objetivo.
+- `TreeNode`: Nodo básico para representar el árbol binario.
+
+---
+
+## Resumen
+
+- **Requerimiento 1:** Se controla la ejecución del proceso para evitar duplicados.
+- **Requerimiento 2:** Se obtienen los reportes, se ordenan alfabéticamente y se muestran en pantalla.
+- **Clase adicional SerieI:** Busca caminos con suma objetivo en un árbol binario.
+
+Este proyecto asegura la correcta gestión y presentación de los datos, garantizando eficiencia y claridad.
+
